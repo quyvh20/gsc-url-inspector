@@ -388,7 +388,7 @@ async function fetchAndDisplaySitemap(url) {
 
     const parsed = parseSitemap(xml);
     if (parsed.type === "index") {
-      document.getElementById("sitemapStatus").innerHTML = `🗺️ Sitemap index có <b>${parsed.urls.length}</b> sitemap con. Click vào link bên dưới để fetch từng sitemap con!`;
+      document.getElementById("sitemapStatus").innerHTML = `🗺️ Sitemap index contains <b>${parsed.urls.length}</b> child sitemaps. Click links below to fetch each child sitemap!`;
       renderListBox(parsed.urls, "sitemapListBox", true);
 
       // Enable click các sitemap con
@@ -402,13 +402,13 @@ async function fetchAndDisplaySitemap(url) {
         }
       });
     } else {
-      document.getElementById("sitemapStatus").textContent = `✅ Đã lấy ${parsed.urls.length} URL!`;
+      document.getElementById("sitemapStatus").textContent = `✅ Retrieved ${parsed.urls.length} URLs!`;
       renderListBox(parsed.urls, "sitemapListBox");
       urlList = parsed.urls;
     }
     document.getElementById("sitemapListBox").style.display = "block";
   } catch(e) {
-    document.getElementById("sitemapStatus").textContent = "❌ Lỗi: " + e.message;
+    document.getElementById("sitemapStatus").textContent = "❌ Error: " + e.message;
     document.getElementById("sitemapListBox").style.display = "block";
     renderListBox([], "sitemapListBox");
     urlList = [];
@@ -534,7 +534,3 @@ window.gisLoaded = ()=>{ if (savedClientId) initOAuth(); };
 <script async defer src="https://accounts.google.com/gsi/client"></script>
 </body>
 </html>
-
-
-
-
