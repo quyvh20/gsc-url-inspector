@@ -347,62 +347,39 @@ document.getElementById("csvInput").addEventListener("change", function(e){
 });
 
 // ====== Fetch sitemap.xml ======
-document.getElementById("fetchSitemapBtn").onclick = async () => {
+document.getElementById("fetchSitemapBtn").onclick = async ()=>{
   const sitemapUrl = document.getElementById("sitemapUrl").value.trim();
   if (!sitemapUrl) return alert("Enter the sitemap address first.");
   document.getElementById("sitemapStatus").textContent = "⏳ Fetching and parsing sitemap...";
-  const proxies = [
-    url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-    url => 'https://corsproxy.io/?' + encodeURIComponent(url),
-    url => 'https://thingproxy.freeboard.io/fetch/' + url,
-    url => 'https://proxy.cors.sh/' + url
-  ];
-  let lastError = "";
-  let success = false;
-  let text = "";
-  for (let i = 0; i < proxies.length; i++) {
-    try {
-      let proxyUrl = proxies[i](sitemapUrl);
-      let opt = {};
-      // Đặc biệt cho proxy.cors.sh phải gửi header
-      if (proxyUrl.startsWith('https://proxy.cors.sh/')) {
-        opt.headers = { 'x-cors-api-key': 'temp_cors_api_key' };
-      }
-      const resp = await fetch(proxyUrl, opt);
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
-      text = await resp.text();
-      success = true;
-      break; // Nếu thành công thì thoát vòng lặp
-    } catch (e) {
-      lastError = `[${i+1}] Proxy fail: ${e.message}`;
-      // Thử proxy tiếp theo
+  try {
+    // Dùng Worker của bạn!
+    const workerApi = 'https://gsc-sitemap-proxy.hvquy99.workers.dev/?url=' + encodeURIComponent(sitemapUrl);
+    const resp = await fetch(workerApi);
+    if (!resp.ok) throw new Error("Failed worker fetch: " + resp.status);
+    const text = await resp.text();
+    // Parse sitemap như cũ
+    const urls = Array.from(text.matchAll(/<loc>(.*?)<\/loc>/g)).map(m=>m[1].trim());
+    if(urls.length){
+      urlList = urls;
+      document.getElementById("sitemapStatus").textContent = `🗺️ Got ${urls.length} URLs from sitemap!`;
+      renderListBox(urls, "sitemapListBox");
+      document.getElementById("sitemapListBox").style.display = "block";
+      appendLog(`🗺️ Got ${urls.length} URLs from sitemap!`);
+    }else{
+      document.getElementById("sitemapStatus").textContent = "No valid URLs found in sitemap!";
+      renderListBox([], "sitemapListBox");
+      document.getElementById("sitemapListBox").style.display = "block";
+      appendLog("⚠️ No valid URLs found in sitemap!");
+      urlList = [];
     }
-  }
-  if (!success) {
-    document.getElementById("sitemapStatus").textContent =
-      "❌ All proxy failed: " + lastError;
-    renderListBox([], "sitemapListBox");
-    appendLog("❌ All proxy failed: " + lastError);
-    urlList = [];
-    return;
-  }
-  // Parse URLs như cũ
-  const urls = Array.from(text.matchAll(/<loc>(.*?)<\/loc>/g)).map(m => m[1].trim());
-  if(urls.length){
-    urlList = urls;
-    document.getElementById("sitemapStatus").textContent = `🗺️ Got ${urls.length} URLs from sitemap!`;
-    renderListBox(urls, "sitemapListBox");
-    document.getElementById("sitemapListBox").style.display = "block";
-    appendLog(`🗺️ Got ${urls.length} URLs from sitemap!`);
-  }else{
-    document.getElementById("sitemapStatus").textContent = "No valid URLs found in sitemap!";
+  }catch(e){
+    document.getElementById("sitemapStatus").textContent = "❌ Worker error: " + e.message;
     renderListBox([], "sitemapListBox");
     document.getElementById("sitemapListBox").style.display = "block";
-    appendLog("⚠️ No valid URLs found in sitemap!");
+    appendLog("❌ Worker error: " + e.message);
     urlList = [];
   }
 }
-
 
 // ===== Get final URLstoUse =====
 function getUrlList() {
@@ -515,5 +492,6 @@ window.gisLoaded = ()=>{ if (savedClientId) initOAuth(); };
 <script async defer src="https://accounts.google.com/gsi/client"></script>
 </body>
 </html>
+
 
 
