@@ -352,7 +352,8 @@ document.getElementById("fetchSitemapBtn").onclick = async ()=>{
   if (!sitemapUrl) return alert("Enter the sitemap address first.");
   document.getElementById("sitemapStatus").textContent = "⏳ Fetching and parsing sitemap...";
   try {
-    const resp = await fetch(sitemapUrl);
+    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(sitemapUrl);
+    const resp = await fetch(proxyUrl);
     if (!resp.ok) throw new Error("Failed to fetch sitemap");
     const text = await resp.text();
     const urls = Array.from(text.matchAll(/<loc>(.*?)<\/loc>/g)).map(m=>m[1].trim());
@@ -489,3 +490,4 @@ window.gisLoaded = ()=>{ if (savedClientId) initOAuth(); };
 <script async defer src="https://accounts.google.com/gsi/client"></script>
 </body>
 </html>
+
