@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>🔍 GSC URL Inspection Tool</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://apis.google.com/js/api.js"></script>
+  <style>
+    body {
+      font-family: "Inter", system-ui, sans-serif;
+      margin: 0; padding: 0;
+      background: #f9fafb;
+    }
+    header {
+      background: #0f766e;
+      color: white;
+      padding: 14px 20px;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .main-container {
+      max-width: 950px;
+      margin: 30px auto;
+      background: white;
+      border-radius: 8px;
+      padding: 20px 25px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+    }
+    label { display:block; font-weight:500; margin-top:10px; }
+    input[type="text"], textarea, select {
+      width:100%; padding:8px; border:1px solid #ccc; border-radius:6px; margin-top:5px;
+    }
+    textarea { min-height: 100px; resize: vertical; }
+    button {
+      background:#0f766e; color:white; border:none; border-radius:6px;
+      padding:8px 16px; font-weight:500; cursor:pointer; margin-top:12px;
+    }
+    button:disabled { opacity:0.5; cursor:not-allowed; }
+    #log {
+      background:#0f172a; color:#e2e8f0; font-family: monospace;
+      padding:10px; border-radius:6px; margin-top:15px; min-height:160px;
+      overflow-y:auto; white-space:pre-wrap;
+    }
+    table {
+      width:100%; border-collapse:collapse; margin-top:15px; font-size:14px;
+    }
+    th, td {
+      border:1px solid #ccc; padding:6px 8px; text-align:left;
+    }
+    th { background:#e2e8f0; }
+    .input-mode-btn { background:#475569; margin-right:8px; }
+    .hidden { display:none!important; }
+    .csvSampleBtn { background:#2563eb; margin-left:7px; margin-top:0;}
+    .toggle-link { color:#2563eb; cursor:pointer; background:none; border:none; font-size:13px; margin-left:10px; }
+    .status-list-box { background:#f1f5f9; border-radius:5px; padding:12px; font-size:13px; margin-top:5px; max-height:210px; overflow:auto; }
+    #exportBtn { background:#2563eb; margin-top:0; margin-left:10px;}
+  </style>
+</head>
+<body>
+  <header>🔍 Google Search Console URL Inspection Tool</header>
+  <div class="main-container">
+
+    <label for="clientId">Google OAuth Client ID:</label>
+    <input id="clientId" type="text" placeholder="Enter Client ID (xxxx.apps.googleusercontent.com)" />
+    <button id="saveClientIdBtn">💾 Save Client ID</button>
+
+    <hr style="margin:20px 0;">
+    <p>Sign in with your Google account which has <b>Owner</b> or <b>Full user</b> permission in Search Console.</p>
+    <button id="signinBtn" disabled>🔑 Sign in with Google</button>
+    <button id="signoutBtn" style="display:none;">🚪 Sign out</button>
+    <div id="userInfo" style="margin-top:10px;"></div>
+
+    <hr style="margin:20px 0;">
+
+    <label>Select your site on Search Console:</label>
+    <select id="siteSelect" disabled>
+      <option>Sign in to load site list...</option>
+    </select>
+
+    <label>Choose input mode for URL list:</label>
+    <div style="margin-top:7px;">
+      <button class="input-mode-btn" id="manualBtn">✍️ Manual input</button>
+      <button class="input-mode-btn" id="csvBtn">📁 Import CSV</button>
+      <button class="input-mode-btn" id="sitemapBtn">🗺️ Import sitemap</button>
+    </div>
+
+    <!-- 1. Manual mode -->
+    <div id="manualPanel">
+      <label>List of URLs to check (one per line):</label>
+      <textarea id="urls"></textarea>
+      <button class="toggle-link" id="toggleManualListBtn" style="margin-left:0;">Show/Hide URL list</button>
+      <div class="status-list-box" id="manualListBox" style="display:block;"></div>
+    </div>
+    <!-- 2. CSV mode -->
+    <div id="csvPanel" class="hidden">
+      <div style="display:flex;align-items:center;">
+        <label>Import CSV (should have a URL column, e.g.):</label>
+        <button class="csvSampleBtn" id="downloadCsvBtn">⬇️ Download sample</button>
+      </div>
+      <input type="file" id="csvInput" accept=".csv" />
+      <div id="csvStatus" style="margin-top:8px;color:#0f766e;font-size:13px;"></div>
+      <button class="toggle-link" id="toggleCsvListBtn" style="margin-left:0;">Show/Hide URL list</button>
+      <div class="status-list-box" id="csvListBox" style="display:none;"></div>
+    </div>
+    <!-- 3. Sitemap mode -->
+    <div id="sitemapPanel" class="hidden">
+      <label>Enter your Sitemap XML link:</label>
+      <input type="text" id="sitemapUrl" placeholder="https://domain.com/sitemap.xml" />
+      <button id="fetchSitemapBtn" style="margin-left:7px;">Fetch URLs from sitemap</button>
+      <div id="sitemapStatus" style="margin-top:7px;font-size:13px;color:#0f766e;"></div>
+      <button class="toggle-link" id="toggleSitemapListBtn" style="margin-left:0;">Show/Hide URL list</button>
+      <div class="status-list-box" id="sitemapListBox" style="display:none;"></div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <button id="inspectBtn" disabled>Check Index</button>
+      <button id="stopBtn" disabled style="background:#991b1b;">⛔ Stop</button>
+      <button id="exportBtn" disabled>⬇️ Export results CSV</button>
+    </div>
+    <div id="statusDiv" style="margin-top:10px;font-weight:500;color:#0f766e;"></div>
+    <table id="resultTable">
+      <thead>
+        <tr>
+          <th>URL</th>
+          <th>Verdict</th>
+          <th>Coverage</th>
+          <th>Last Crawl</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <button id="toggleLogBtn" style="background:#475569;margin-top:15px;">📄 Show log</button>
+    <div id="log" style="display:none;">No logs yet...</div>
+  </div>
+
+<script>
+const SCOPES = "https://www.googleapis.com/auth/webmasters.readonly";
+let CLIENT_ID = null;
+let tokenClient, gapiInited=false, gisInited=false, accessToken=null;
+let stopFlag = false;
+let urlList = [];
+let resultsArr = [];
+const sampleCsv =
+`URL
+https://example.com/
+https://example.com/page-1
+https://example.com/page-2
+https://example.com/contact
+`;
+// ========= Utils: show/hide list ==========
+function renderListBox(arr, boxId) {
+  const box = document.getElementById(boxId);
+  if (!arr || !arr.length) { box.innerHTML = "<i>No URLs.</i>"; return; }
+  box.innerHTML = arr.slice(0,100).map(u=>'<div>'+u+'</div>').join('');
+  if(arr.length>100) box.innerHTML += `<div style="color:#475569;">...and ${arr.length-100} more URLs</div>`;
+}
+
+// ========= Switch input panel ===========
+function showPanel(mode) {
+  document.getElementById("manualPanel").classList.toggle("hidden", mode!=="manual");
+  document.getElementById("csvPanel").classList.toggle("hidden", mode!=="csv");
+  document.getElementById("sitemapPanel").classList.toggle("hidden", mode!=="sitemap");
+  document.getElementById("sitemapStatus").textContent = "";
+  document.getElementById("csvStatus").textContent = "";
+  if (mode==="manual") {
+    renderListBox(getManualUrlList(), "manualListBox");
+    document.getElementById("manualListBox").style.display = "block";
+  }
+}
+document.getElementById("manualBtn").onclick = ()=>showPanel("manual");
+document.getElementById("csvBtn").onclick = ()=>showPanel("csv");
+document.getElementById("sitemapBtn").onclick = ()=>showPanel("sitemap");
+showPanel("manual");
+
+// Manual: Show/hide
+document.getElementById("toggleManualListBtn").onclick = function(){
+  const box = document.getElementById("manualListBox");
+  box.style.display = box.style.display==="none"?"block":"none";
+};
+document.getElementById("urls").addEventListener("input", function(){
+  renderListBox(getManualUrlList(), "manualListBox");
+});
+
+// CSV: Show/hide
+document.getElementById("toggleCsvListBtn").onclick = function(){
+  const box = document.getElementById("csvListBox");
+  box.style.display = box.style.display==="none"?"block":"none";
+};
+// Sitemap: Show/hide
+document.getElementById("toggleSitemapListBtn").onclick = function(){
+  const box = document.getElementById("sitemapListBox");
+  box.style.display = box.style.display==="none"?"block":"none";
+};
+// ===== Download CSV sample =====
+document.getElementById("downloadCsvBtn").onclick = function() {
+  const blob = new Blob([sampleCsv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = "sample.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ====== OAuth logic ======
+const savedClientId = localStorage.getItem("gsc_client_id");
+if (savedClientId) document.getElementById("clientId").value = savedClientId;
+document.getElementById("saveClientIdBtn").addEventListener("click", ()=>{
+  CLIENT_ID = document.getElementById("clientId").value.trim();
+  if (!CLIENT_ID) return alert("Enter Client ID first.");
+  localStorage.setItem("gsc_client_id", CLIENT_ID);
+  appendLog("✅ Client ID saved. Ready to sign in.");
+  initOAuth();
+});
+function initOAuth() {
+  if (!CLIENT_ID) return appendLog("⚠️ No Client ID yet.");
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: (resp) => {
+      if (resp.error) return appendLog("❌ Token error: "+resp.error);
+      accessToken = resp.access_token;
+      document.getElementById("signinBtn").style.display = "none";
+      document.getElementById("signoutBtn").style.display = "inline-block";
+      loadUserSites();
+    }
+  });
+  gisInited = true;
+  maybeEnableSignin();
+}
+function gapiLoaded() { gapi.load('client', initializeGapiClient); }
+async function initializeGapiClient() {
+  await gapi.client.init({
+    discoveryDocs: [
+      "https://searchconsole.googleapis.com/$discovery/rest?version=v1"
+    ]
+  });
+  gapiInited = true;
+  maybeEnableSignin();
+}
+function maybeEnableSignin() {
+  if (gapiInited && gisInited) document.getElementById("signinBtn").disabled = false;
+}
+document.getElementById("signinBtn").addEventListener("click", ()=>{
+  if (!CLIENT_ID) return alert("Fill in Client ID and click Save first.");
+  tokenClient.requestAccessToken({prompt:"consent"});
+});
+document.getElementById("signoutBtn").addEventListener("click", ()=>{
+  google.accounts.oauth2.revoke(accessToken, ()=>{
+    accessToken = null;
+    toggleButtons(true);
+    document.getElementById("siteSelect").innerHTML="<option>Sign in to load site list...</option>";
+    document.getElementById("userInfo").innerText = "";
+    clearTable();
+    appendLog("Signed out.");
+  });
+});
+async function loadUserSites() {
+  appendLog("🔄 Loading your site list...");
+  try {
+    const resp = await gapi.client.webmasters.sites.list();
+    const sites = resp.result.siteEntry || [];
+    const sel = document.getElementById("siteSelect");
+    sel.innerHTML="";
+    for (const s of sites) {
+      const opt = document.createElement("option");
+      opt.value = s.siteUrl;
+      opt.textContent = `${s.siteUrl} (${s.permissionLevel})`;
+      sel.appendChild(opt);
+    }
+    sel.disabled = false;
+    toggleButtons(true);
+    const idResp = await fetch("https://www.googleapis.com/oauth2/v2/userinfo",{headers:{Authorization:"Bearer "+accessToken}});
+    const user = await idResp.json();
+    document.getElementById("userInfo").innerHTML = `👤 <b>${user.email}</b> – permission for ${sites.length} site(s).`;
+    appendLog(`✅ Loaded ${sites.length} site(s).`);
+  } catch(e){ appendLog("❌ Site loading error: "+e.message); }
+}
+function clearTable(){
+  const tbody = document.querySelector("#resultTable tbody");
+  if (tbody) tbody.innerHTML="";
+}
+function toggleButtons(enable){
+  document.getElementById("saveClientIdBtn").disabled = !enable;
+  document.getElementById("signinBtn").disabled = !enable;
+  document.getElementById("inspectBtn").disabled = !enable;
+  document.getElementById("urls").disabled = !enable;
+  document.getElementById("siteSelect").disabled = !enable;
+  document.getElementById("csvInput").disabled = !enable;
+  document.getElementById("sitemapUrl").disabled = !enable;
+  document.getElementById("fetchSitemapBtn").disabled = !enable;
+  document.getElementById("exportBtn").disabled = !enable;
+}
+
+// ===== Manual mode - textarea
+function getManualUrlList(){
+  return document.getElementById("urls").value.split("\n").map(u=>u.trim()).filter(Boolean);
+}
+// ===== CSV import =====
+document.getElementById("csvInput").addEventListener("change", function(e){
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    let lines = ev.target.result.split(/\r?\n/);
+    let urls = [];
+    let headerIdx = -1;
+    const header = lines[0].split(",");
+    for(let i=0;i<header.length;i++) {
+      if (/^(url|URL)$/i.test(header[i].trim())) headerIdx = i;
+    }
+    if(headerIdx>-1){
+      for(let i=1;i<lines.length;i++){
+        let cols = lines[i].split(",");
+        if(cols.length>headerIdx){
+          let url = cols[headerIdx].trim();
+          if(/^https?:\/\//.test(url)) urls.push(url);
+        }
+      }
+    } else {
+      for(let line of lines){
+        let cols = line.split(",");
+        for(let cell of cols){
+          cell = cell.trim();
+          if(/^https?:\/\//.test(cell)) urls.push(cell);
+        }
+      }
+    }
+    if(urls.length){
+      urlList = urls;
+      document.getElementById("csvStatus").textContent = `Imported ${urls.length} URLs from CSV.`;
+      renderListBox(urls, "csvListBox");
+      document.getElementById("csvListBox").style.display = "block";
+      appendLog(`📁 Imported ${urls.length} URLs from CSV!`);
+    }else{
+      document.getElementById("csvStatus").textContent = "No valid URLs found in file!";
+      appendLog("⚠️ No valid URLs found in CSV.");
+      urlList = [];
+      renderListBox([], "csvListBox");
+    }
+  }
+  reader.readAsText(file);
+  this.value = '';
+});
+
+// ====== Fetch sitemap.xml ======
+document.getElementById("fetchSitemapBtn").onclick = async ()=>{
+  const sitemapUrl = document.getElementById("sitemapUrl").value.trim();
+  if (!sitemapUrl) return alert("Enter the sitemap address first.");
+  document.getElementById("sitemapStatus").textContent = "⏳ Fetching and parsing sitemap...";
+  try {
+    const resp = await fetch(sitemapUrl);
+    if (!resp.ok) throw new Error("Failed to fetch sitemap");
+    const text = await resp.text();
+    const urls = Array.from(text.matchAll(/<loc>(.*?)<\/loc>/g)).map(m=>m[1].trim());
+    if(urls.length){
+      urlList = urls;
+      document.getElementById("sitemapStatus").textContent = `🗺️ Got ${urls.length} URLs from sitemap!`;
+      renderListBox(urls, "sitemapListBox");
+      document.getElementById("sitemapListBox").style.display = "block";
+      appendLog(`🗺️ Got ${urls.length} URLs from sitemap!`);
+    }else{
+      document.getElementById("sitemapStatus").textContent = "No valid URLs found in sitemap!";
+      renderListBox([], "sitemapListBox");
+      document.getElementById("sitemapListBox").style.display = "block";
+      appendLog("⚠️ No valid URLs found in sitemap!");
+      urlList = [];
+    }
+  }catch(e){
+    document.getElementById("sitemapStatus").textContent = "❌ Error fetching or parsing sitemap.";
+    renderListBox([], "sitemapListBox");
+    document.getElementById("sitemapListBox").style.display = "block";
+    appendLog("❌ Sitemap error: "+e.message);
+    urlList = [];
+  }
+}
+
+// ===== Get final URLstoUse =====
+function getUrlList() {
+  if(!document.getElementById("manualPanel").classList.contains("hidden")) {
+    return getManualUrlList();
+  }
+  if(!document.getElementById("csvPanel").classList.contains("hidden")) {
+    return urlList || [];
+  }
+  if(!document.getElementById("sitemapPanel").classList.contains("hidden")) {
+    return urlList || [];
+  }
+  return [];
+}
+
+// ====== Check Index ======
+document.getElementById("inspectBtn").addEventListener("click", async ()=>{
+  const siteUrl = document.getElementById("siteSelect").value;
+  const urls = getUrlList();
+  if (!siteUrl || !urls.length) return appendLog("⚠️ Fill in site + URLs first.");
+  clearTable();
+  resultsArr = [];
+  stopFlag = false;
+  toggleButtons(false);
+  document.getElementById("stopBtn").disabled = false;
+  const statusDiv = document.getElementById("statusDiv");
+  statusDiv.textContent = "⏳ Checking index...";
+  for (const u of urls){
+    if (stopFlag) break;
+    await inspectOne(siteUrl, u);
+  }
+  statusDiv.textContent = stopFlag? "⛔ Stopped." : "✅ Done.";
+  toggleButtons(true);
+  document.getElementById("stopBtn").disabled = true;
+  if (resultsArr.length) document.getElementById("exportBtn").disabled = false;
+});
+document.getElementById("stopBtn").addEventListener("click", ()=>{ stopFlag = true; });
+
+async function inspectOne(siteUrl, inspectionUrl){
+  const tbody = document.querySelector("#resultTable tbody");
+  const row = document.createElement("tr");
+  row.innerHTML = `<td>${inspectionUrl}</td><td>🔍 Checking...</td><td></td><td></td>`;
+  tbody.appendChild(row);
+  try{
+    const resp = await gapi.client.request({
+      path:"https://searchconsole.googleapis.com/v1/urlInspection/index:inspect",
+      method:"POST",
+      headers:{Authorization:"Bearer "+accessToken},
+      body:{siteUrl, inspectionUrl}
+    });
+    const idx = resp.result.inspectionResult.indexStatusResult;
+    row.cells[1].textContent = idx.verdict || "N/A";
+    row.cells[2].textContent = idx.coverageState || "N/A";
+    row.cells[3].textContent = idx.lastCrawlTime || "N/A";
+    resultsArr.push({
+      url: inspectionUrl,
+      verdict: idx.verdict || "N/A",
+      coverage: idx.coverageState || "N/A",
+      lastCrawl: idx.lastCrawlTime || "N/A"
+    });
+  }catch(e){
+    row.cells[1].textContent = "❌ Error";
+    row.cells[2].textContent = e.result?.error?.message || e.message;
+    row.cells[3].textContent = "";
+    resultsArr.push({
+      url: inspectionUrl,
+      verdict: "Error",
+      coverage: e.result?.error?.message || e.message,
+      lastCrawl: ""
+    });
+  }
+}
+
+// ===== Export to CSV =====
+document.getElementById("exportBtn").onclick = function(){
+  if(!resultsArr.length) return;
+  let csv = "URL,Verdict,Coverage,Last Crawl\n";
+  for(const r of resultsArr){
+    csv += `"${r.url.replace(/"/g,'""')}","${r.verdict.replace(/"/g,'""')}","${r.coverage.replace(/"/g,'""')}","${r.lastCrawl.replace(/"/g,'""')}"\n`;
+  }
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = "gsc-index-results.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// === Log & toggle log ===
+document.getElementById("toggleLogBtn").addEventListener("click", ()=>{
+  const log = document.getElementById("log");
+  const btn = document.getElementById("toggleLogBtn");
+  const isHidden = log.style.display === "none";
+  log.style.display = isHidden? "block":"none";
+  btn.textContent = isHidden? "📄 Hide log":"📄 Show log";
+});
+function appendLog(msg){
+  const log = document.getElementById("log");
+  log.textContent += (log.textContent.trim()? "\n":"")+msg;
+  log.scrollTop = log.scrollHeight;
+}
+
+window.gapiLoaded = gapiLoaded;
+window.gisLoaded = ()=>{ if (savedClientId) initOAuth(); };
+</script>
+<script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+<script async defer src="https://accounts.google.com/gsi/client"></script>
+</body>
+</html>
