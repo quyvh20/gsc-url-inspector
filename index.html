@@ -232,6 +232,7 @@ function initOAuth() {
     callback: (resp) => {
       if (resp.error) return appendLog("❌ Token error: "+resp.error);
       accessToken = resp.access_token;
+      sessionStorage.setItem("gsc_access_token", accessToken); // Lưu session
       document.getElementById("signinBtn").style.display = "none";
       document.getElementById("signoutBtn").style.display = "inline-block";
       loadUserSites();
@@ -260,6 +261,7 @@ document.getElementById("signinBtn").addEventListener("click", ()=>{
 document.getElementById("signoutBtn").addEventListener("click", ()=>{
   google.accounts.oauth2.revoke(accessToken, ()=>{
     accessToken = null;
+    sessionStorage.removeItem("gsc_access_token"); // Xóa session luôn!
     toggleButtons(true);
     document.getElementById("siteSelect").innerHTML="<option>Sign in to load site list...</option>";
     document.getElementById("userInfo").innerText = "";
@@ -267,6 +269,7 @@ document.getElementById("signoutBtn").addEventListener("click", ()=>{
     appendLog("Signed out.");
   });
 });
+
 async function loadUserSites() {
   appendLog("🔄 Loading your site list...");
   try {
@@ -534,3 +537,4 @@ window.gisLoaded = ()=>{ if (savedClientId) initOAuth(); };
 <script async defer src="https://accounts.google.com/gsi/client"></script>
 </body>
 </html>
+
