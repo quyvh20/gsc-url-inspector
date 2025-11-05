@@ -225,21 +225,21 @@ document.getElementById("downloadCsvBtn").onclick = function() {
 
 // ====== OAuth logic ======
 function initOAuth() {
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: SCOPES,
-    callback: (resp) => {
-      if (resp.error) return appendLog("❌ Token error: "+resp.error);
-      accessToken = resp.access_token;
-      gapi.client.setToken(resp); 
-      sessionStorage.setItem("gsc_access_token", JSON.stringify(resp)); 
-      document.getElementById("signinBtn").style.display = "none";
-      document.getElementById("signoutBtn").style.display = "inline-block";
-      loadUserSites();
-    }
-  });
-  gisInited = true;
-  maybeEnableSignin();
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: (resp) => {
+      if (resp.error) return appendLog("❌ Token error: "+resp.error);
+      accessToken = resp.access_token;
+      gapi.client.setToken(resp); 
+      sessionStorage.setItem("gsc_access_token", JSON.stringify(resp)); 
+      document.getElementById("signinBtn").style.display = "none";
+      document.getElementById("signoutBtn").style.display = "inline-block";
+      loadUserSites();
+    }
+  });
+  gisInited = true;
+  maybeEnableSignin();
 }
 function gapiLoaded() { gapi.load('client', initializeGapiClient); }
 async function initializeGapiClient() {
@@ -252,33 +252,33 @@ async function initializeGapiClient() {
   maybeEnableSignin();
 }
 function maybeEnableSignin() {
-  if (gapiInited && gisInited) {
+  if (gapiInited && gisInited) {
 
-    const storedTokenData = sessionStorage.getItem("gsc_access_token");
+    const storedTokenData = sessionStorage.getItem("gsc_access_token");
 
-    if (storedTokenData) {
-      appendLog("🔄 Found existing session. Trying to resume...");
-      const tokenResponse = JSON.parse(storedTokenData);
-      accessToken = tokenResponse.access_token;
-      gapi.client.setToken(tokenResponse);
-      loadUserSites().then(() => {
-        appendLog("✅ Session resumed successfully.");
-        document.getElementById("signinBtn").style.display = "none";
-        document.getElementById("signoutBtn").style.display = "inline-block";
-      }).catch((e) => {
-        appendLog("⚠️ Session token is invalid or expired. Please sign in again.");
-        accessToken = null;
-        sessionStorage.removeItem("gsc_access_token");
-        setSignedInUI(false); 
-        document.getElementById("signinBtn").disabled = false;
-        document.getElementById("signinBtn").style.display = "inline-block";
-        document.getElementById("signoutBtn").style.display = "none";
-      });
+    if (storedTokenData) {
+      appendLog("🔄 Found existing session. Trying to resume...");
+      const tokenResponse = JSON.parse(storedTokenData);
+      accessToken = tokenResponse.access_token;
+      gapi.client.setToken(tokenResponse);
+      loadUserSites().then(() => {
+        appendLog("✅ Session resumed successfully.");
+        document.getElementById("signinBtn").style.display = "none";
+        document.getElementById("signoutBtn").style.display = "inline-block";
+      }).catch((e) => {
+        appendLog("⚠️ Session token is invalid or expired. Please sign in again.");
+        accessToken = null;
+        sessionStorage.removeItem("gsc_access_token");
+        setSignedInUI(false);
+        document.getElementById("signinBtn").disabled = false;
+        document.getElementById("signinBtn").style.display = "inline-block";
+        document.getElementById("signoutBtn").style.display = "none";
+      });
 
-    } else {
-      document.getElementById("signinBtn").disabled = false;
-    }
-  }
+    } else {
+      document.getElementById("signinBtn").disabled = false;
+    }
+  }
 }
 document.getElementById("signinBtn").addEventListener("click", ()=>{
   if (!CLIENT_ID) return alert("Fill in Client ID and click Save first.");
@@ -307,31 +307,31 @@ document.getElementById("signoutBtn").addEventListener("click", () => {
 });
 
 async function loadUserSites() {
-  appendLog("🔄 Loading your site list...");
-  try {
-    const resp = await gapi.client.webmasters.sites.list();
-    const sites = resp.result.siteEntry || [];
-    const sel = document.getElementById("siteSelect");
-    sel.innerHTML="";
-    for (const s of sites) {
-      const opt = document.createElement("option");
-      opt.value = s.siteUrl;
-      opt.textContent = `${s.siteUrl} (${s.permissionLevel})`;
-      sel.appendChild(opt);
-    }
-    sel.disabled = false;
-    setSignedInUI(true);
-    toggleButtons(true);
-    const idResp = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
-      headers: { Authorization: "Bearer " + accessToken }
-    });
-    const user = await idResp.json();
-    document.getElementById("userInfo").innerHTML = `👤 <b>${user.email}</b> – permission for ${sites.length} site(s).`;
-    appendLog(`✅ Loaded ${sites.length} site(s).`);
-  } catch(e){ 
-    appendLog("❌ Site loading error: "+(e.result?.error?.message || e.message)); 
-    throw e; 
-  }
+  appendLog("🔄 Loading your site list...");
+  try {
+    const resp = await gapi.client.webmasters.sites.list();
+    const sites = resp.result.siteEntry || [];
+    const sel = document.getElementById("siteSelect");
+    sel.innerHTML="";
+    for (const s of sites) {
+      const opt = document.createElement("option");
+      opt.value = s.siteUrl;
+      opt.textContent = `${s.siteUrl} (${s.permissionLevel})`;
+      sel.appendChild(opt);
+    }
+    sel.disabled = false;
+    setSignedInUI(true);
+    toggleButtons(true);
+    const idResp = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+      headers: { Authorization: "Bearer " + accessToken }
+    });
+    const user = await idResp.json();
+    document.getElementById("userInfo").innerHTML = `👤 <b>${user.email}</b> – permission for ${sites.length} site(s).`;
+    appendLog(`✅ Loaded ${sites.length} site(s).`);
+  } catch(e){ 
+    appendLog("❌ Site loading error: "+(e.result?.error?.message || e.message)); 
+    throw e; 
+  }
 }
 function clearTable(){
   const tbody = document.querySelector("#resultTable tbody");
