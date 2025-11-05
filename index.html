@@ -60,12 +60,6 @@
 <body>
   <header>🔍 Google Search Console URL Inspection Tool</header>
   <div class="main-container">
-
-    <label for="clientId">Google OAuth Client ID:</label>
-    <input id="clientId" type="text" placeholder="Enter Client ID (xxxx.apps.googleusercontent.com)" />
-    <button id="saveClientIdBtn">💾 Save Client ID</button>
-
-    <hr style="margin:20px 0;">
     <p>Sign in with your Google account which has <b>Owner</b> or <b>Full user</b> permission in Search Console.</p>
     <button id="signinBtn" disabled>🔑 Sign in with Google</button>
     <button id="signoutBtn" style="display:none;">🚪 Sign out</button>
@@ -119,6 +113,19 @@
       <button id="exportBtn" disabled>⬇️ Export results CSV</button>
     </div>
     <div id="statusDiv" style="margin-top:10px;font-weight:500;color:#0f766e;"></div>
+    <!-- Result filter -->
+    <div id="filterBox" style="margin:10px 0; display:none;">
+      <label style="font-weight:500;">🔎 Filter:</label>
+      <select id="filterVerdict" style="margin-left:5px;">
+        <option value="">-- All Verdict --</option>
+      </select>
+      <select id="filterCoverage" style="margin-left:5px;">
+        <option value="">-- All Coverage --</option>
+      </select>
+      <button id="applyFilterBtn" style="margin-left:8px;">Apply</button>
+      <button id="resetFilterBtn" style="margin-left:5px;background:#475569;">Reset</button>
+    </div>   
+
     <table id="resultTable">
       <thead>
         <tr>
@@ -131,12 +138,14 @@
       <tbody></tbody>
     </table>
     <button id="toggleLogBtn" style="background:#475569;margin-top:15px;">📄 Show log</button>
+    <button id="fullResetBtn" style="background:#9333ea;">🔄 Reset Results</button>
     <div id="log" style="display:none;">No logs yet...</div>
   </div>
 
 <script>
-const SCOPES = "https://www.googleapis.com/auth/webmasters.readonly";
-let CLIENT_ID = null;
+const SCOPES = "https://www.googleapis.com/auth/webmasters.readonly openid email profile";
+let CLIENT_ID = '455527248424-npcrkujgr528ak32jbjj9p69jiquk360.apps.googleusercontent.com';
+let isSignedIn = false;
 let tokenClient, gapiInited=false, gisInited=false, accessToken=null;
 let stopFlag = false;
 let urlList = [];
@@ -215,17 +224,7 @@ document.getElementById("downloadCsvBtn").onclick = function() {
 }
 
 // ====== OAuth logic ======
-const savedClientId = localStorage.getItem("gsc_client_id");
-if (savedClientId) document.getElementById("clientId").value = savedClientId;
-document.getElementById("saveClientIdBtn").addEventListener("click", ()=>{
-  CLIENT_ID = document.getElementById("clientId").value.trim();
-  if (!CLIENT_ID) return alert("Enter Client ID first.");
-  localStorage.setItem("gsc_client_id", CLIENT_ID);
-  appendLog("✅ Client ID saved. Ready to sign in.");
-  initOAuth();
-});
 function initOAuth() {
-  if (!CLIENT_ID) return appendLog("⚠️ No Client ID yet.");
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
@@ -258,12 +257,22 @@ document.getElementById("signinBtn").addEventListener("click", ()=>{
   if (!CLIENT_ID) return alert("Fill in Client ID and click Save first.");
   tokenClient.requestAccessToken({prompt:"consent"});
 });
-document.getElementById("signoutBtn").addEventListener("click", ()=>{
-  google.accounts.oauth2.revoke(accessToken, ()=>{
+document.getElementById("signoutBtn").addEventListener("click", () => {
+  google.accounts.oauth2.revoke(accessToken, () => {
     accessToken = null;
-    sessionStorage.removeItem("gsc_access_token"); // Xóa session luôn!
-    toggleButtons(true);
-    document.getElementById("siteSelect").innerHTML="<option>Sign in to load site list...</option>";
+    sessionStorage.removeItem("gsc_access_token");
+
+    // 🔒 Đặt UI về trạng thái chưa đăng nhập + làm mờ toàn bộ
+    setSignedInUI(false);
+    toggleButtons(false);
+
+    // 🔁 Reset hiển thị nút đăng nhập/đăng xuất
+    document.getElementById("signinBtn").style.display = "inline-block";
+    document.getElementById("signinBtn").disabled = false;
+    document.getElementById("signoutBtn").style.display = "none";
+
+    // 🔁 Reset nội dung
+    document.getElementById("siteSelect").innerHTML = "<option>Sign in to load site list...</option>";
     document.getElementById("userInfo").innerText = "";
     clearTable();
     appendLog("Signed out.");
@@ -284,8 +293,11 @@ async function loadUserSites() {
       sel.appendChild(opt);
     }
     sel.disabled = false;
+    setSignedInUI(true);
     toggleButtons(true);
-    const idResp = await fetch("https://www.googleapis.com/oauth2/v2/userinfo",{headers:{Authorization:"Bearer "+accessToken}});
+    const idResp = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+      headers: { Authorization: "Bearer " + accessToken }
+    });
     const user = await idResp.json();
     document.getElementById("userInfo").innerHTML = `👤 <b>${user.email}</b> – permission for ${sites.length} site(s).`;
     appendLog(`✅ Loaded ${sites.length} site(s).`);
@@ -295,17 +307,68 @@ function clearTable(){
   const tbody = document.querySelector("#resultTable tbody");
   if (tbody) tbody.innerHTML="";
 }
-function toggleButtons(enable){
-  document.getElementById("saveClientIdBtn").disabled = !enable;
-  document.getElementById("signinBtn").disabled = !enable;
-  document.getElementById("inspectBtn").disabled = !enable;
-  document.getElementById("urls").disabled = !enable;
-  document.getElementById("siteSelect").disabled = !enable;
-  document.getElementById("csvInput").disabled = !enable;
-  document.getElementById("sitemapUrl").disabled = !enable;
-  document.getElementById("fetchSitemapBtn").disabled = !enable;
-  document.getElementById("exportBtn").disabled = !enable;
+function toggleButtons(enable) {
+  if (!isSignedIn) {
+  const all = document.querySelectorAll("input, select, textarea, button");
+  all.forEach(el => {
+    el.disabled = true;
+    el.style.opacity = 0.4;
+    el.style.pointerEvents = "none";
+  });
+  document.getElementById("signinBtn").style.opacity = 1;
+  document.getElementById("signinBtn").style.pointerEvents = "auto";
+  return;
 }
+  const mainControls = [
+    "clientId", "saveClientIdBtn", "siteSelect",
+    "manualBtn", "csvBtn", "sitemapBtn",
+    "urls", "csvInput", "sitemapUrl", "fetchSitemapBtn",
+    "downloadCsvBtn", "toggleManualListBtn",
+    "toggleCsvListBtn", "toggleSitemapListBtn",
+    "fullResetBtn", "applyFilterBtn", "resetFilterBtn"
+  ];
+
+  mainControls.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (!enable) {
+      el.disabled = true;
+      el.style.opacity = 0.4;
+      el.style.pointerEvents = "none";
+    } else {
+      el.disabled = false;
+      el.style.opacity = 1;
+      el.style.pointerEvents = "auto";
+    }
+  });
+
+  // Bật / tắt các nút chính
+  document.getElementById("inspectBtn").disabled = !enable;
+  document.getElementById("stopBtn").disabled = enable; // chỉ bật Stop khi đang chạy
+  document.getElementById("exportBtn").disabled = !enable || !resultsArr.length;
+  document.getElementById("signinBtn").disabled = !enable;
+  document.getElementById("signoutBtn").disabled = !enable;
+}
+
+
+function setSignedInUI(signedIn) {
+  isSignedIn = signedIn;
+  // Các phần chỉ dùng được khi đã đăng nhập
+  document.getElementById("siteSelect").disabled = !signedIn;
+  document.getElementById("manualBtn").disabled = !signedIn;
+  document.getElementById("csvBtn").disabled = !signedIn;
+  document.getElementById("sitemapBtn").disabled = !signedIn;
+  document.getElementById("urls").disabled = !signedIn;
+  document.getElementById("csvInput").disabled = !signedIn;
+  document.getElementById("sitemapUrl").disabled = !signedIn;
+  document.getElementById("fetchSitemapBtn").disabled = !signedIn;
+  document.getElementById("inspectBtn").disabled = !signedIn;
+
+  // Kết quả & filter chỉ bật khi đã có kết quả
+  document.getElementById("exportBtn").disabled = true;
+  document.getElementById("filterBox").style.display = "none";
+}
+
 
 // ===== Manual mode - textarea
 function getManualUrlList(){
@@ -459,7 +522,12 @@ document.getElementById("inspectBtn").addEventListener("click", async ()=>{
   statusDiv.textContent = stopFlag? "⛔ Stopped." : "✅ Done.";
   toggleButtons(true);
   document.getElementById("stopBtn").disabled = true;
-  if (resultsArr.length) document.getElementById("exportBtn").disabled = false;
+  if (resultsArr.length) {
+    document.getElementById("exportBtn").disabled = false;
+    setupFilters(resultsArr);
+    document.getElementById("filterBox").style.display = "block";
+  }
+
 });
 document.getElementById("stopBtn").addEventListener("click", ()=>{ stopFlag = true; });
 
@@ -530,11 +598,63 @@ function appendLog(msg){
   log.scrollTop = log.scrollHeight;
 }
 
+// ===== Bộ lọc bảng kết quả =====
+function setupFilters(data) {
+  const verdicts = [...new Set(data.map(r => r.verdict).filter(Boolean))];
+  const coverages = [...new Set(data.map(r => r.coverage).filter(Boolean))];
+  const verdictSel = document.getElementById("filterVerdict");
+  const coverageSel = document.getElementById("filterCoverage");
+  verdictSel.innerHTML = '<option value="">-- All Verdict --</option>' + verdicts.map(v => `<option value="${v}">${v}</option>`).join('');
+  coverageSel.innerHTML = '<option value="">-- All Coverage --</option>' + coverages.map(v => `<option value="${v}">${v}</option>`).join('');
+}
+
+// Áp dụng filter
+document.getElementById("applyFilterBtn").onclick = function() {
+  const vVal = document.getElementById("filterVerdict").value;
+  const cVal = document.getElementById("filterCoverage").value;
+  const tbody = document.querySelector("#resultTable tbody");
+  const rows = tbody.querySelectorAll("tr");
+  rows.forEach(r => {
+    const verdict = r.cells[1].textContent.trim();
+    const coverage = r.cells[2].textContent.trim();
+    const show = (!vVal || verdict === vVal) && (!cVal || coverage === cVal);
+    r.style.display = show ? "" : "none";
+  });
+};
+
+// Reset filter
+document.getElementById("resetFilterBtn").onclick = function() {
+  document.getElementById("filterVerdict").value = "";
+  document.getElementById("filterCoverage").value = "";
+  const rows = document.querySelectorAll("#resultTable tbody tr");
+  rows.forEach(r => r.style.display = "");
+};
+
+// ===== Reset toàn bộ giao diện (trừ đăng xuất) =====
+document.getElementById("fullResetBtn").onclick = function() {
+  if (!confirm("Are you sure you want to reset everything? (Not log out)")) return;
+  clearTable();
+  document.getElementById("urls").value = "";
+  document.getElementById("manualListBox").innerHTML = "";
+  document.getElementById("csvListBox").innerHTML = "";
+  document.getElementById("sitemapListBox").innerHTML = "";
+  document.getElementById("sitemapStatus").textContent = "";
+  document.getElementById("csvStatus").textContent = "";
+  document.getElementById("statusDiv").textContent = "";
+  document.getElementById("log").textContent = "No logs yet...";
+  document.getElementById("filterBox").style.display = "none";
+  document.getElementById("exportBtn").disabled = true;
+  resultsArr = [];
+  urlList = [];
+  appendLog("🔄 Done!");
+};
+
+setSignedInUI(false);
 window.gapiLoaded = gapiLoaded;
-window.gisLoaded = ()=>{ if (savedClientId) initOAuth(); };
+window.gisLoaded = ()=>{ initOAuth(); };
 </script>
 <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
-<script async defer src="https://accounts.google.com/gsi/client"></script>
+<script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 </body>
 </html>
 
